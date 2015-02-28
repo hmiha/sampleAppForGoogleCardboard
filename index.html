@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>If it snows like Hokakido?</title>
+<script src="http://stemkoski.github.io/Three.js/js/Three.js"></script>
+
+<style>
+div#canvas-frame{
+  border: none;
+  cursor: pointer;
+  width: 960px;
+  height: 500px;
+  background-color: #000000;
+  left: 0;
+}
+</style>
+
+<script>
+// キーボード入力
+document.onkeydown = function (evt){
+  if (evt){
+    var kc = evt.keyCode;
+  }
+  var chr = String.fromCharCode(kc);
+
+  if (chr == '('){
+    wind -= 0.5;
+  }
+  if (chr == '&'){
+    wind += 0.5;
+  }
+};
+
+var x, y, z;
+  window.ondevicemotion = 
+  function (event) {
+    x = event.accelerationIncludingGravity.x;
+    y = event.accelerationIncludingGravity.y;
+    z = event.accelerationIncludingGravity.z;
+  }
+
+  var compassHeading;
+  var alpha, beta, gamma;
+  window.ondeviceorientation =
+  function (event) {
+    compassHeading = event.webkitCompassHeading;
+    alpha = event.alpha;
+    beta  = event.beta;
+    gamma = event.gamma;
+    var res = document.getElementById("res");
+    res.innerHTML = '方位 : ' + compassHeading;
+  }
+
+  var wind, deg;
+  function getWeather() {
+     var city = "Ikoma,jp";
+     api = 'http://api.openweathermap.org/data/2.5/weather?units=metric&q=' +city;
+     console.log( api );
+
+     var httpObj = new XMLHttpRequest();
+
+     httpObj.open("GET", api , false);
+     httpObj.onload = function(){
+       var data = JSON.parse(this.responseText);  // JSONをパース
+
+       wind = data.wind.speed;
+       deg = data.wind.deg;
+       if (deg > 180){
+         deg = deg - 180;
+       }
+       return wind, deg;
+     }
+     httpObj.send(null)
+  }
+
+  var renderer;
+  var width, height;
+  function initThree() {
+    width = document.getElementById('canvas-frame').clientWidth;
+    height = document.getElementById('canvas-frame').clientHeight;  
+    renderer = new THREE.WebGLRenderer({antialias: true});
+    document.getElementById('canvas-frame').appendChild(renderer.domElement);
+    renderer.setClearColor(0x000000, 1.0); 
+    renderer.setSize(width, height);
+    renderer.autoClear = false;
+  }
+
+  var cameraL, cameraR;
+  var eyeDistance = 30;
+  function initCamera() {  
+    cameraL = new THREE.PerspectiveCamera( 30 , 2 * height / width , 100 , 1000 );
+    cameraL.position.x = 0;
+    cameraL.position.y = -eyeDistance / 2;
+    cameraL.position.z = 400;
+    cameraL.up.x = 0;
+    cameraL.up.y = 0;
+    cameraL.up.z = 1;
+    cameraL.lookAt( {x:0, y:-eyeDistance / 2, z:0 } );
+
+    // Right
+    cameraR = new THREE.PerspectiveCamera( 30 , 2 * height / width, 100 , 1000 );
+    cameraR.position.x = 0;
+    cameraR.position.y = eyeDistance / 2;
+    cameraR.position.z = 400;
+    cameraR.up.x = 0;
+    cameraR.up.y = 0;
+    cameraR.up.z = 1;
+    cameraR.lookAt( {x:0, y:eyeDistance / 2, z:0 } );
+  }
+
+  var scene;
+  function initScene() {    
+    scene = new THREE.Scene();
+  }
+  var light, light2;
+  function initLight() {  
+    light = new THREE.DirectionalLight(0xaaaaaa, 1.0, 0);
+    light.position.set( 100, 100, 200 );
+    // light.castShadow = true;
+    scene.add(light);
+
+    light2 = new THREE.AmbientLight(0x555555);
+    scene.add(light2);
+  }
+
+  var snow;
+  var range = 2000;
+  var num;
+  function createSnow() {
+
+    num = 100000;
+    var geometry = new THREE.Geometry();
+    for( var i = 0; i < num; i++ ){
+      geometry.vertices.push( new THREE.Vector3( 
+          Math.random() * range - range/2,
+          Math.random() * range - range/2,
+          Math.random() * range - range/2 
+          ));
+    }
+
+    var texture = THREE.ImageUtils.loadTexture( 'particle1.png' );
+    var material = new THREE.ParticleBasicMaterial({
+      size: 15,
+      color: 0xffffff,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthTest: false,
+      map: texture,
+    });
+
+    snow = new THREE.ParticleSystem( geometry, material );
+    snow.sortParticles = false;
+    scene.add(snow);
+  }
+
+  function loop() {
+
+    if (compassHeading) {
+      if (compassHeading > 180)
+        compassHeading -= 360;
+      cameraL.rotation.x = compassHeading / 180;
+      cameraR.rotation.x = compassHeading / 180;
+    }
+
+    var info = document.getElementById("info");
+    info.innerHTML = 'Wind : ' + wind + '\n';
+    info.innerHTML += 'Direction : ' + deg + '\n';
+
+    snow.position.x += 1 + wind;
+    snow.position.y += (wind ) * Math.cos( deg * Math.PI / 180 );
+    snow.position.z += (wind ) * Math.sin( deg * Math.PI / 180 );
+
+    if (snow.position.x > range/3 | snow.position.y > range/3 | snow.position.z > range/3  ) { 
+      snow.position.x = 0
+      snow.position.y = 0
+      snow.position.z = 0
+    }
+
+    renderer.setViewport( 0, 0, width, height );
+    renderer.clear();
+
+    renderer.setViewport( 0, 0, width - 2, 2 * height - 2 );
+    renderer.render(scene, cameraL);
+
+    renderer.setViewport( width + 1, 0, width - 2,  2 * height - 2 );
+    renderer.render(scene, cameraR);
+
+    requestAnimationFrame(loop);
+  }
+
+  function threeStart() {
+    initThree();
+    getWeather();
+    initCamera();
+    initScene();
+    initLight();
+    createSnow();
+    loop();
+  }
+</script>
+</head>
+<body onload="threeStart();" style="overflow: hidden;">
+<div style="width: 960px; margin: 0px auto;">
+<div id="canvas-frame"></div>
+</div>
+<br>
+<div id="info"></div>
+<!-- <div id="res"></div> -->
+</body>
+</html>
